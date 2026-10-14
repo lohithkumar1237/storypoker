@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: storypoker
+    runtime: node
+    plan: free
+    # Deploy automatically on every push to main.
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      # NODE_ENV is deliberately not set here: npm ci must keep the dev
+      # dependencies the build needs. `npm start` sets it for the server.
+      - key: NODE_VERSION
+        value: "22"
