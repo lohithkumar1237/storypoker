@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SESSION_LENGTH_MS } from "./types";
 import { buildRoomState, type RoomSnapshot } from "./view";
 
 function room(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
   return {
     id: "abcd1234",
-    createdAt: 1_000,
     story: "Login page",
     revealed: false,
     members: [
@@ -40,11 +38,10 @@ describe("buildRoomState", () => {
     expect(state.results?.average).toBe(5.5);
   });
 
-  it("copies room fields and computes expiry", () => {
+  it("copies room fields", () => {
     const state = buildRoomState(room(), "aaaaaa");
     expect(state.roomId).toBe("abcd1234");
     expect(state.story).toBe("Login page");
-    expect(state.expiresAt).toBe(1_000 + SESSION_LENGTH_MS);
     expect(state.participants[1]).toMatchObject({ name: "Bob", isAdmin: false, online: false });
   });
 

@@ -1,8 +1,8 @@
 export const DECK = [1, 2, 3, 5, 8] as const;
 export type CardValue = (typeof DECK)[number];
 
-/** Rooms live for two hours from creation. */
-export const SESSION_LENGTH_MS = 2 * 60 * 60 * 1000;
+/** A room with nobody connected for this long is deleted. */
+export const IDLE_ROOM_MS = 60 * 60 * 2000;
 
 export const NAME_MAX = 30;
 export const TITLE_MAX = 200;
@@ -41,8 +41,6 @@ export interface Results {
 /** One viewer's masked view of a room. */
 export interface RoomState {
   roomId: string;
-  createdAt: number;
-  expiresAt: number;
   story: string;
   revealed: boolean;
   participants: Participant[];

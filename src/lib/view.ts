@@ -1,11 +1,9 @@
 import { computeResults } from "./rounding";
-import { sessionEndsAt } from "./session";
 import type { CardValue, Participant, RoomState } from "./types";
 
 /** The parts of a server room that a view is built from. */
 export interface RoomSnapshot {
   id: string;
-  createdAt: number;
   story: string;
   revealed: boolean;
   members: readonly {
@@ -33,8 +31,6 @@ export function buildRoomState(room: RoomSnapshot, viewerId: string): RoomState 
   const votes = room.members.flatMap((m) => (m.vote === null ? [] : [m.vote]));
   return {
     roomId: room.id,
-    createdAt: room.createdAt,
-    expiresAt: sessionEndsAt(room.createdAt),
     story: room.story,
     revealed: room.revealed,
     participants,

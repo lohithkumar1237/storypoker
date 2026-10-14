@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ServerMessage } from "../src/lib/protocol";
-import { SESSION_LENGTH_MS, type RoomState } from "../src/lib/types";
+import { IDLE_ROOM_MS, type RoomState } from "../src/lib/types";
 import { RoomManager, type Connection } from "./rooms";
 
 class FakeConn implements Connection {
@@ -205,27 +205,39 @@ describe("RoomManager", () => {
     expect(admin.messages.filter((m) => m.type === "REACTION")).toHaveLength(2);
   });
 
-  it("expires rooms two hours after creation", () => {
+  it("never closes a room while anyone is connected", () => {
+    join(BOB, "Bob");
+    for (let i = 0; i < 5; i++) {
+      now += IDLE_ROOM_MS;
+      mgr.sweep();
+    }
+    expect(mgr.roomCount).toBe(1);
+  });
+
+  it("deletes a room after an hour with nobody connected", () => {
     const bob = join(BOB, "Bob");
-    now += SESSION_LENGTH_MS - 1;
+    mgr.disconnect(admin);
+    mgr.disconnect(bob);
+    mgr.sweep();
+    now += IDLE_ROOM_MS - 1;
     mgr.sweep();
     expect(mgr.roomCount).toBe(1);
 
     now += 1;
     mgr.sweep();
     expect(mgr.roomCount).toBe(0);
-    expect(admin.last("EXPIRED")).toBeDefined();
-    expect(bob.last("EXPIRED")).toBeDefined();
-    expect(bob.closed).toBe(true);
-
-    const late = join(CAT, "Cat");
-    expect(late.messages).toEqual([{ type: "NOT_FOUND" }]);
+    expect(join(CAT, "Cat").messages).toEqual([{ type: "NOT_FOUND" }]);
   });
 
-  it("answers EXPIRED to a join that arrives before the sweep", () => {
-    now += SESSION_LENGTH_MS;
-    const late = join(CAT, "Cat");
-    expect(late.messages).toEqual([{ type: "EXPIRED" }]);
-    expect(mgr.roomCount).toBe(0);
+  it("restarts the idle clock when someone comes back", () => {
+    mgr.disconnect(admin);
+    mgr.sweep();
+    now += IDLE_ROOM_MS - 1;
+    join(ADMIN, "Ann");
+    mgr.sweep();
+    mgr.disconnect(admin);
+    now += 1;
+    mgr.sweep();
+    expect(mgr.roomCount).toBe(1);
   });
 });

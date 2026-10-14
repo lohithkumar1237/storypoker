@@ -1,7 +1,6 @@
 import { customAlphabet, nanoid } from "nanoid";
 import type { ClientMessage, ServerMessage } from "../src/lib/protocol";
-import { isExpired } from "../src/lib/session";
-import { REACTION_COOLDOWN_MS, type CardValue } from "../src/lib/types";
+import { IDLE_ROOM_MS, REACTION_COOLDOWN_MS, type CardValue } from "../src/lib/types";
 import { buildRoomState } from "../src/lib/view";
 
 /** Anything that can carry server messages to one client. A WebSocket in production, a stub in tests. */
@@ -23,13 +22,14 @@ interface Member {
 
 interface Room {
   id: string;
-  createdAt: number;
   adminClientId: string;
   story: string;
   revealed: boolean;
   /** Keyed by client id, in join order. */
   members: Map<string, Member>;
   kicked: Set<string>;
+  /** When the last connected member left, or null while anyone is connected. */
+  emptySince: number | null;
 }
 
 interface Binding {
@@ -139,11 +139,17 @@ export class RoomManager {
     }
   }
 
-  /** Closes and deletes every expired room. Called on a timer by the server. */
+  /**
+   * Deletes rooms nobody has been connected to for `IDLE_ROOM_MS`, so memory
+   * doesn't fill with abandoned rooms. Called on a timer by the server.
+   */
   sweep(): void {
     const now = this.now();
     for (const room of this.rooms.values()) {
-      if (isExpired(room.createdAt, now)) this.expire(room);
+      const anyoneConnected = [...room.members.values()].some((m) => m.conn !== null);
+      if (anyoneConnected) room.emptySince = null;
+      else if (room.emptySince === null) room.emptySince = now;
+      else if (now - room.emptySince >= IDLE_ROOM_MS) this.rooms.delete(room.id);
     }
   }
 
@@ -153,12 +159,12 @@ export class RoomManager {
     while (this.rooms.has(id)) id = this.newRoomId();
     const room: Room = {
       id,
-      createdAt: this.now(),
       adminClientId: clientId,
       story: "",
       revealed: false,
       members: new Map(),
       kicked: new Set(),
+      emptySince: null,
     };
     room.members.set(clientId, { id: this.newMemberId(), clientId, name, vote: null, conn, lastReactionAt: 0 });
     this.rooms.set(id, room);
@@ -170,10 +176,6 @@ export class RoomManager {
   private join(conn: Connection, roomId: string, clientId: string, name: string): void {
     const room = this.rooms.get(roomId);
     if (!room) return conn.send({ type: "NOT_FOUND" });
-    if (isExpired(room.createdAt, this.now())) {
-      this.expire(room);
-      return conn.send({ type: "EXPIRED" });
-    }
     if (room.kicked.has(clientId)) {
       conn.send({ type: "KICKED" });
       return conn.close();
@@ -213,10 +215,6 @@ export class RoomManager {
     const room = this.rooms.get(binding.roomId);
     const member = room?.members.get(binding.clientId);
     if (!room || !member) return null;
-    if (isExpired(room.createdAt, this.now())) {
-      this.expire(room);
-      return null;
-    }
     return { room, member };
   }
 
@@ -233,17 +231,6 @@ export class RoomManager {
     }
   }
 
-  private expire(room: Room): void {
-    this.rooms.delete(room.id);
-    for (const member of room.members.values()) {
-      if (!member.conn) continue;
-      this.bindings.delete(member.conn);
-      member.conn.send({ type: "EXPIRED" });
-      member.conn.close();
-      member.conn = null;
-    }
-  }
-
   private uniqueMemberId(room: Room): string {
     const taken = new Set([...room.members.values()].map((m) => m.id));
     let id = this.newMemberId();
@@ -252,10 +239,8 @@ export class RoomManager {
   }
 
   private broadcast(room: Room): void {
-    const serverTime = this.now();
     const snapshot = {
       id: room.id,
-      createdAt: room.createdAt,
       story: room.story,
       revealed: room.revealed,
       members: [...room.members.values()].map((m) => ({
@@ -270,7 +255,6 @@ export class RoomManager {
       member.conn?.send({
         type: "STATE_SYNC",
         selfId: member.id,
-        serverTime,
         state: buildRoomState(snapshot, member.id),
       });
     }

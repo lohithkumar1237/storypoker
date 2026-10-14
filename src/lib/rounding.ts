@@ -2,19 +2,14 @@ import { DECK, type CardValue, type Results } from "./types";
 
 export { DECK };
 
-/** Nearest deck card to `value`. An exact tie between two cards rounds up. */
+/**
+ * Rounds the average to a whole number (.5 goes up), then moves up to the
+ * next deck card if that number isn't on the deck:
+ * 1.5 → 2, 2.4 → 2, 3.5 → 4 → 5, 5.5 → 6 → 8.
+ */
 export function roundToDeck(value: number): CardValue {
-  let best: CardValue = DECK[0];
-  let bestDistance = Infinity;
-  for (const card of DECK) {
-    const distance = Math.abs(card - value);
-    // `<=` lets the later (larger) card win a tie.
-    if (distance <= bestDistance) {
-      best = card;
-      bestDistance = distance;
-    }
-  }
-  return best;
+  const whole = Math.round(value);
+  return DECK.find((card) => card >= whole) ?? DECK[DECK.length - 1];
 }
 
 export function isConsensus(votes: readonly CardValue[]): boolean {

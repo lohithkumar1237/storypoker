@@ -23,10 +23,9 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "CREATED"; roomId: string }
-  | { type: "STATE_SYNC"; selfId: string; serverTime: number; state: RoomState }
+  | { type: "STATE_SYNC"; selfId: string; state: RoomState }
   | { type: "REACTION"; participantId: string; fromId: string; emoji: Reaction }
   | { type: "KICKED" }
-  | { type: "EXPIRED" }
   | { type: "NOT_FOUND" }
   | { type: "ERROR"; message: string };
 
@@ -121,18 +120,14 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "CREATED":
       return isRoomId(m.roomId) ? { type: "CREATED", roomId: m.roomId } : null;
     case "STATE_SYNC":
-      return isString(m.selfId) &&
-        typeof m.serverTime === "number" &&
-        m.state !== null &&
-        typeof m.state === "object"
-        ? { type: "STATE_SYNC", selfId: m.selfId, serverTime: m.serverTime, state: m.state as RoomState }
+      return isString(m.selfId) && m.state !== null && typeof m.state === "object"
+        ? { type: "STATE_SYNC", selfId: m.selfId, state: m.state as RoomState }
         : null;
     case "REACTION":
       return isString(m.participantId) && isString(m.fromId) && isReaction(m.emoji)
         ? { type: "REACTION", participantId: m.participantId, fromId: m.fromId, emoji: m.emoji }
         : null;
     case "KICKED":
-    case "EXPIRED":
     case "NOT_FOUND":
       return { type: m.type };
     case "ERROR":

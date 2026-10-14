@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Story Poker",
-  description: "Quick planning poker for small teams. No sign-up, rooms last two hours.",
+  description: "Quick planning poker for small teams. No sign-up needed.",
 };
 
 export const viewport: Viewport = {

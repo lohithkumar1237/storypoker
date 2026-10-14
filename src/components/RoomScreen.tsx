@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useClock } from "@/src/hooks/useClock";
 import { useRoomConnection } from "@/src/hooks/useRoomConnection";
 import type { Seat } from "@/src/lib/persist";
 import { TITLE_MAX } from "@/src/lib/types";
@@ -11,16 +10,6 @@ import CardRow from "./CardRow";
 import PlayerTile from "./PlayerTile";
 import ResultsPanel from "./ResultsPanel";
 
-function formatRemaining(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
-}
-
 export default function RoomScreen({ roomId, seat }: { roomId: string; seat: Seat }) {
   const actions = useRoomConnection(roomId, seat);
   const state = useRoomStore((s) => s.state);
@@ -28,8 +17,6 @@ export default function RoomScreen({ roomId, seat }: { roomId: string; seat: Sea
   const status = useRoomStore((s) => s.status);
   const error = useRoomStore((s) => s.error);
   const reactions = useRoomStore((s) => s.reactions);
-  const serverOffset = useRoomStore((s) => s.serverOffset);
-  const now = useClock(serverOffset);
 
   if (status === "kicked") {
     return (
@@ -40,21 +27,11 @@ export default function RoomScreen({ roomId, seat }: { roomId: string; seat: Sea
       </Notice>
     );
   }
-  if (status === "expired") {
-    return (
-      <Notice title="Session expired">
-        <p className="text-slate-600 dark:text-slate-400">Rooms close two hours after they&apos;re created.</p>
-        <Link href="/" className="btn-primary">
-          Start a new room
-        </Link>
-      </Notice>
-    );
-  }
   if (status === "not_found") {
     return (
       <Notice title="Can't find this room">
         <p className="text-slate-600 dark:text-slate-400">
-          It may have expired, or the server restarted and closed it.
+          It may have closed after an hour with nobody in it, or the server restarted.
         </p>
         <div className="flex justify-center gap-3">
           <button type="button" className="btn-secondary" onClick={actions.retry}>
@@ -75,7 +52,6 @@ export default function RoomScreen({ roomId, seat }: { roomId: string; seat: Sea
   const isAdmin = me?.isAdmin ?? false;
   const anyVotes = state.participants.some((p) => p.hasVoted);
   const voted = state.participants.filter((p) => p.hasVoted).length;
-  const remaining = state.expiresAt - now;
 
   return (
     <div className={isAdmin ? "pb-[calc(4.5rem+env(safe-area-inset-bottom))]" : ""}>
@@ -83,19 +59,7 @@ export default function RoomScreen({ roomId, seat }: { roomId: string; seat: Sea
         <Link href="/" className="shrink-0 text-base font-bold tracking-tight sm:text-lg">
           🃏 Story Poker
         </Link>
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs tabular-nums sm:px-3 sm:text-sm ${
-              remaining < 10 * 60_000
-                ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-            }`}
-            title="Time left in this session"
-          >
-            ⏱ {formatRemaining(remaining)}
-          </span>
-          {isAdmin && <CopyInvite roomId={roomId} />}
-        </div>
+        {isAdmin && <CopyInvite roomId={roomId} />}
       </header>
 
       {status === "reconnecting" && (

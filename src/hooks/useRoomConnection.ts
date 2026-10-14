@@ -6,15 +6,6 @@ import { RoomSocket } from "@/src/lib/roomSocket";
 import type { CardValue, Reaction } from "@/src/lib/types";
 import { useRoomStore } from "@/src/store/roomStore";
 
-function serverNow(): number {
-  return Date.now() + useRoomStore.getState().serverOffset;
-}
-
-function locallyExpired(): boolean {
-  const { state } = useRoomStore.getState();
-  return state !== null && serverNow() >= state.expiresAt;
-}
-
 /** Owns the `RoomSocket` for one room and exposes the room actions. */
 export function useRoomConnection(roomId: string, seat: Seat) {
   const seatRef = useRef(seat);
@@ -34,22 +25,18 @@ export function useRoomConnection(roomId: string, seat: Seat) {
           clientId: seatRef.current.clientId,
           name: seatRef.current.name,
         }),
-        isExpired: locallyExpired,
       },
       {
         onMessage(msg) {
           switch (msg.type) {
             case "STATE_SYNC":
-              store().applySync(msg.selfId, msg.serverTime, msg.state);
+              store().applySync(msg.selfId, msg.state);
               break;
             case "REACTION":
               store().showReaction(msg.participantId, msg.emoji);
               break;
             case "KICKED":
               store().setStatus("kicked");
-              break;
-            case "EXPIRED":
-              store().setStatus("expired");
               break;
             case "NOT_FOUND":
               store().setStatus("not_found");
@@ -77,21 +64,9 @@ export function useRoomConnection(roomId: string, seat: Seat) {
     return () => socket.stop();
   }, [socket]);
 
-  // Local expiry check, each second.
-  const stopped = useRef(false);
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (stopped.current || !locallyExpired()) return;
-      stopped.current = true;
-      socket.stop();
-      useRoomStore.getState().setStatus("expired");
-    }, 1_000);
-    return () => clearInterval(id);
-  }, [socket]);
-
   const retry = useCallback(() => {
     const { status } = useRoomStore.getState();
-    if (status === "kicked" || status === "expired") return;
+    if (status === "kicked") return;
     socket.stop();
     useRoomStore.getState().reset();
     socket.start();

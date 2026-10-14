@@ -6,20 +6,23 @@ describe("roundToDeck", () => {
     for (const card of [1, 2, 3, 5, 8] as const) expect(roundToDeck(card)).toBe(card);
   });
 
-  it("rounds to the nearest card", () => {
+  it("rounds .5 and above up, below .5 down", () => {
+    expect(roundToDeck(1.5)).toBe(2);
+    expect(roundToDeck(1.49)).toBe(1);
     expect(roundToDeck(2.4)).toBe(2);
-    expect(roundToDeck(4.6)).toBe(5);
+    expect(roundToDeck(2.5)).toBe(3);
+  });
+
+  it("moves up to the next card when the whole number isn't on the deck", () => {
+    expect(roundToDeck(3.5)).toBe(5);
+    expect(roundToDeck(4)).toBe(5);
+    expect(roundToDeck(5.5)).toBe(8);
     expect(roundToDeck(7)).toBe(8);
   });
 
-  it("rounds 3.5 to 3, since 3 is nearer than 5", () => {
-    expect(roundToDeck(3.5)).toBe(3);
-  });
-
-  it("rounds exact ties up", () => {
-    expect(roundToDeck(1.5)).toBe(2);
-    expect(roundToDeck(4)).toBe(5);
-    expect(roundToDeck(6.5)).toBe(8);
+  it("stays on the lower card below .5", () => {
+    expect(roundToDeck(3.4)).toBe(3);
+    expect(roundToDeck(5.4)).toBe(5);
   });
 
   it("clamps values outside the deck", () => {
@@ -65,8 +68,7 @@ describe("computeResults", () => {
     expect(r!.rounded).toBe(5);
   });
 
-  it("uses the unrounded mean for the card", () => {
-    // mean 3.5 → 3, even though the displayed average is 3.5
-    expect(computeResults([2, 5])!.rounded).toBe(3);
+  it("rounds a 3.5 average up to 5", () => {
+    expect(computeResults([2, 5])!.rounded).toBe(5);
   });
 });

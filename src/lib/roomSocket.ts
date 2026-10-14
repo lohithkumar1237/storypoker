@@ -12,8 +12,6 @@ export interface RoomSocketHandlers {
 export interface RoomSocketOptions {
   /** Sent on every open, so a reconnect rebinds the seat. */
   hello: () => ClientMessage;
-  /** When true, the socket stops instead of reconnecting. */
-  isExpired?: () => boolean;
   url?: string;
 }
 
@@ -74,7 +72,6 @@ export class RoomSocket {
 
   private connect(): void {
     if (!this.running) return;
-    if (this.options.isExpired?.()) return this.stop();
 
     this.handlers.onStatus("connecting");
     const ws = new WebSocket(this.options.url ?? socketUrl());
@@ -93,7 +90,7 @@ export class RoomSocket {
       }
       this.handlers.onMessage(msg);
       // These end the session; reconnecting would only repeat them.
-      if (msg.type === "KICKED" || msg.type === "EXPIRED" || msg.type === "NOT_FOUND") this.stop();
+      if (msg.type === "KICKED" || msg.type === "NOT_FOUND") this.stop();
     };
     ws.onclose = () => {
       if (this.ws !== ws) return;

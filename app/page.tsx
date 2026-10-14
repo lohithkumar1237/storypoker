@@ -72,7 +72,7 @@ export default function HomePage() {
         <div aria-hidden className="text-5xl">🃏</div>
         <h1 className="text-3xl font-bold tracking-tight">Story Poker</h1>
         <p className="text-slate-600 dark:text-slate-400">
-          Estimate together in real time. No sign-up. Rooms last two hours.
+          Estimate together in real time. No sign-up needed.
         </p>
       </header>
 

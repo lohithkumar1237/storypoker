@@ -12,21 +12,18 @@ export type RoomStatus =
   | "live"
   | "reconnecting"
   | "not_found"
-  | "expired"
   | "kicked";
 
 interface RoomStore {
   state: RoomState | null;
   selfId: string | null;
-  /** serverTime - Date.now() at the last sync. */
-  serverOffset: number;
   status: RoomStatus;
   error: string | null;
   /** The reaction currently on each participant's card, by participant id. */
   reactions: Record<string, ShownReaction>;
 
   reset(): void;
-  applySync(selfId: string, serverTime: number, state: RoomState): void;
+  applySync(selfId: string, state: RoomState): void;
   setStatus(status: RoomStatus): void;
   setError(error: string | null): void;
   showReaction(participantId: string, emoji: Reaction): void;
@@ -37,7 +34,6 @@ let reactionKey = 0;
 const initial = {
   state: null,
   selfId: null,
-  serverOffset: 0,
   status: "connecting" as RoomStatus,
   error: null,
   reactions: {},
@@ -46,8 +42,7 @@ const initial = {
 export const useRoomStore = create<RoomStore>()((set) => ({
   ...initial,
   reset: () => set(initial),
-  applySync: (selfId, serverTime, state) =>
-    set({ selfId, state, serverOffset: serverTime - Date.now(), status: "live", error: null }),
+  applySync: (selfId, state) => set({ selfId, state, status: "live", error: null }),
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
   showReaction: (participantId, emoji) => {
