@@ -1,16 +1,15 @@
 import { createServer } from "node:http";
 import next from "next";
-import { WebSocketServer, type WebSocket } from "ws";
+import { Server as SocketServer } from "socket.io";
 import { RoomManager, type Connection } from "./server/rooms";
 import { parseClientMessage } from "./src/lib/protocol";
-import { MAX_MESSAGE_BYTES } from "./src/lib/types";
+import { MAX_MESSAGE_BYTES, SOCKET_PATH } from "./src/lib/types";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT) || 3000;
 const hostname = process.env.HOST || (dev ? "localhost" : "0.0.0.0");
 
 const SWEEP_MS = 5_000;
-const HEARTBEAT_MS = 30_000;
 const KEEP_ALIVE_MS = 10 * 60_000;
 
 const app = next({ dev, hostname, port });
@@ -20,61 +19,54 @@ await app.prepare();
 const handleNextUpgrade = app.getUpgradeHandler();
 
 const rooms = new RoomManager();
-const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
-const alive = new WeakSet<WebSocket>();
 
 const server = createServer((req, res) => {
   void handleRequest(req, res);
 });
 
-server.on("upgrade", (req, socket, head) => {
-  const { pathname } = new URL(req.url ?? "/", "http://localhost");
-  if (pathname === "/ws") {
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
-  } else {
-    // Next's own upgrades, e.g. HMR in dev.
-    void handleNextUpgrade(req, socket, head);
-  }
+// Socket.IO starts every connection on plain HTTPS long-polling, which
+// corporate VPNs and proxies let through, then upgrades to a WebSocket only
+// where the network allows it. Its own pings drop dead connections.
+const io = new SocketServer(server, {
+  path: SOCKET_PATH,
+  transports: ["polling", "websocket"],
+  maxHttpBufferSize: MAX_MESSAGE_BYTES,
+  serveClient: false,
+  // Leave upgrades on other paths (Next's HMR in dev) to the handler below.
+  destroyUpgrade: false,
 });
 
-wss.on("connection", (ws) => {
+server.on("upgrade", (req, socket, head) => {
+  const { pathname } = new URL(req.url ?? "/", "http://localhost");
+  if (!pathname.startsWith(SOCKET_PATH)) void handleNextUpgrade(req, socket, head);
+});
+
+let connections = 0;
+
+io.on("connection", (socket) => {
   const conn: Connection = {
     send(msg) {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+      socket.emit("msg", JSON.stringify(msg));
     },
     close() {
-      ws.close();
+      socket.disconnect(true);
     },
   };
-  alive.add(ws);
+  connections += 1;
   updateKeepAlive();
 
-  ws.on("pong", () => alive.add(ws));
-  ws.on("message", (data, isBinary) => {
-    if (isBinary) return;
-    const msg = parseClientMessage(data.toString());
+  socket.on("msg", (data: unknown) => {
+    const msg = parseClientMessage(data);
     if (msg) rooms.handle(conn, msg);
   });
-  ws.on("close", () => {
+  socket.on("disconnect", () => {
     rooms.disconnect(conn);
+    connections -= 1;
     updateKeepAlive();
   });
-  ws.on("error", () => ws.terminate());
 });
 
 setInterval(() => rooms.sweep(), SWEEP_MS).unref();
-
-// Drop sockets that stop answering pings, so their seats show as offline.
-setInterval(() => {
-  for (const ws of wss.clients) {
-    if (!alive.has(ws)) {
-      ws.terminate();
-      continue;
-    }
-    alive.delete(ws);
-    ws.ping();
-  }
-}, HEARTBEAT_MS).unref();
 
 // Render's free plan sleeps after idle time. While anyone is connected, ping
 // our own health endpoint so the process stays up.
@@ -83,7 +75,7 @@ let keepAliveTimer: NodeJS.Timeout | null = null;
 
 function updateKeepAlive() {
   if (!keepAliveBase) return;
-  const connected = wss.clients.size > 0;
+  const connected = connections > 0;
   if (connected && !keepAliveTimer) {
     const url = new URL("/api/health", keepAliveBase).toString();
     keepAliveTimer = setInterval(() => {

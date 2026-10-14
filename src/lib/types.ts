@@ -10,6 +10,8 @@ export const CLIENT_ID_MIN = 8;
 export const CLIENT_ID_MAX = 64;
 export const ROOM_ID_RE = /^[a-z0-9]{8}$/;
 export const MAX_MESSAGE_BYTES = 16 * 1024;
+/** Where the Socket.IO server listens. */
+export const SOCKET_PATH = "/ws";
 
 /** Reactions anyone can send to a participant's card. */
 export const REACTIONS = ["👍", "🎉", "😂", "🤔", "🔥", "☕"] as const;
